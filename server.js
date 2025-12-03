@@ -139,9 +139,6 @@ apiRouter.get('/users', async (req, res) => {
 // GET /api/channels
 apiRouter.get('/channels', async (req, res) => {
     try {
-        // Fetch all public channels + private channels the user is part of
-        // For simplicity, we are fetching all channels here. 
-        // You can add logic to filter private channels based on membership.
         const channels = await Channels.findAll({
             order: [['name', 'ASC']]
         });
@@ -172,6 +169,24 @@ apiRouter.post('/channels', async (req, res) => {
             return res.status(400).json({ message: 'Channel name already exists' });
         }
         res.status(500).json({ message: 'Failed to create channel' });
+    }
+});
+//Get user's joined Channels
+apiRouter.get('/channels/join', async (req, res) => {
+    try {
+        const channels = await Channels.findAll({
+            include: [{
+                model: Users,
+                where: { id: req.user.id },
+                attributes: [],
+                through: { attributes: [] }
+            }],
+            order: [['name', 'ASC']]
+        });
+        res.status(200).json(channels);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to fetch channels' });
     }
 });
 
