@@ -341,5 +341,7 @@ apiRouter.post('/messages/:channelId', async (req, res) => {
 
 // Mount router
 app.use('/api', apiRouter);
-
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server is live on port ${PORT}`);
+});
 module.exports = app;
