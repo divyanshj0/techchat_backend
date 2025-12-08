@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { Users, Channels, Messages, sequelize } = require('./config/supabase');
+const { Users, Channels, Messages,ChannelMembers, sequelize } = require('./config/supabase');
 const { Op } = require('sequelize');
  
 // Initialize the Express app
@@ -211,6 +211,21 @@ apiRouter.get('/messages/:channelId', async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch messages' });
     }
 });
+
+// GET /api/members/:channelId
+apiRouter.get('/members/:channelId',async(req,res)=>{
+    const {channelId}=req.params;
+    try{
+        const members=await ChannelMembers.findAll({
+            where:{channel_id:channelId},
+            order:[['name','ASC']]
+        });
+        res.status(200).json(members);
+    } catch(error){
+        console.error(error);
+        res.status(500).json({message:'Failed to fetch users'});
+    }
+})
 
 // POST /api/messages/:channelId
 apiRouter.post('/messages/:channelId', async (req, res) => {
