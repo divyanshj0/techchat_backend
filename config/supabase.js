@@ -130,6 +130,8 @@ Messages.belongsTo(Channels, { foreignKey: 'channel_id' });
 Users.belongsToMany(Channels, { through: ChannelMembers, foreignKey: 'user_id' });
 Channels.belongsToMany(Users, { through: ChannelMembers, foreignKey: 'channel_id' });
 
+// ChannelMembers must 'belong to' a User
+ChannelMembers.belongsTo(Users, { foreignKey: 'user_id' });
 
 // --- SYNC DATABASE ---
 // Use { alter: true } to update tables without deleting data
