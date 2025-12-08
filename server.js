@@ -1,3 +1,6 @@
+// --- ADD THESE TWO LINES AT THE VERY TOP ---
+const dns = require('node:dns');
+dns.setDefaultResultOrder('ipv4first');
 // Import required packages
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
