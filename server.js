@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
+const http = require('http'); 
 require('dotenv').config();
 
 const { Users, Channels, Messages,ChannelMembers, sequelize } = require('./config/supabase');
