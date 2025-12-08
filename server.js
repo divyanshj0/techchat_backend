@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const express = require('express');
 const cors = require('cors');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 const { Users, Channels, Messages,ChannelMembers, sequelize } = require('./config/supabase');
@@ -10,14 +11,85 @@ const { Op } = require('sequelize');
  
 // Initialize the Express app
 const app = express();
-const PORT = process.env.PORT || 30001;
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_123';
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Use middleware
 app.use(cors()); 
 app.use(express.json()); 
 
+// --- CREATE HTTP SERVER & SOCKET.IO ---
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "http://localhost:3000", // Update this to match your frontend URL
+        methods: ["GET", "POST"]
+    }
+});
+
 // --- MIDDLEWARE ---
+
+// Middleware to verify JWT for Socket connections
+io.use(async (socket, next) => {
+    try {
+        const token = socket.handshake.auth.token;
+        if (!token) return next(new Error('Authentication error'));
+
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await Users.findByPk(decoded.id, {
+            attributes: ['id', 'username', 'avatar_color']
+        });
+
+        if (!user) return next(new Error('User not found'));
+        socket.user = user; // Attach user to socket
+        next();
+    } catch (err) {
+        next(new Error('Authentication error'));
+    }
+});
+
+io.on('connection', (socket) => {
+    console.log(`User connected: ${socket.user.username}`);
+
+    // Join a channel room
+    socket.on('join_channel', (channelId) => {
+        socket.join(channelId);
+        console.log(`User ${socket.user.username} joined channel: ${channelId}`);
+    });
+
+    // Handle sending messages
+    socket.on('send_message', async (data) => {
+        const { channelId, content } = data;
+        
+        try {
+            // Save to Database
+            const newMessage = await Messages.create({
+                content,
+                channel_id: channelId,
+                user_id: socket.user.id
+            });
+
+            // Fetch the full message with sender details (for the frontend)
+            const messageWithSender = await Messages.findByPk(newMessage.id, {
+                include: [{
+                    model: Users,
+                    as: 'sender',
+                    attributes: ['id', 'username', 'avatar_color', 'status']
+                }]
+            });
+
+            // Broadcast to everyone in the channel (including sender)
+            io.to(channelId).emit('receive_message', messageWithSender);
+        } catch (error) {
+            console.error('Error saving message:', error);
+            socket.emit('error', 'Message could notqv be sent');
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected');
+    });
+});
 
 // Middleware to verify JWT and protect routes
 const protect = async (req, res, next) => {
@@ -265,12 +337,5 @@ apiRouter.post('/messages/:channelId', async (req, res) => {
 
 // Mount router
 app.use('/api', apiRouter);
-
-// Local Dev Helper
-if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`🚀 Server is live on http://localhost:${PORT}`);
-    });
-}
 
 module.exports = app;
