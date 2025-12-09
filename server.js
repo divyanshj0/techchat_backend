@@ -196,6 +196,21 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 
+// POST /auth/logout
+app.post('/auth/logout', async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token) {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            await Users.update({ status: 'offline' }, { where: { id: decoded.id } });
+        }
+        res.status(200).json({ message: 'Logged out successfully' });
+    } catch (error) {
+        console.error("Logout Error:", error);
+        res.status(200).json({ message: 'Logged out' }); 
+    }
+});
+
 // --- API ROUTES (Protected) ---
 const apiRouter = express.Router();
 apiRouter.use(protect);
@@ -265,6 +280,27 @@ apiRouter.get('/channels/join', async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch channels' });
     }
 });
+
+// POST /api/channels/:channelId/join
+apiRouter.post('/channels/:channelId/join',async(req,res)=>{
+    const {channelId}=req.params;
+    try {
+        const channel=await Channels.findByPk(channelId);
+        if (!channel){
+            return res.status(404).json({message:'channel not found'});
+        }
+        const isMember= await channel.hasUser(req.user);
+        if (isMember){
+            return res.status(400).json({message:'you are already a member of the channel'});
+        }
+        await channel.addUser(req.user,{through:{role:'member'}});
+        res.status(200).json({message:'successfully joined'})
+    }
+    catch(err){
+        console.error('Error joining channel:',err);
+        res.status(500).json({message:'Failed to join channel'});
+    }
+})
 
 // GET /api/members/:channelId
 apiRouter.get('/members/:channelId',async(req,res)=>{
@@ -336,6 +372,84 @@ apiRouter.post('/messages/:channelId', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Failed to send message' });
+    }
+});
+
+// DELETE /api/channels/:channelId/members/:userId (Admin removes a user)
+apiRouter.delete('/channels/:channelId/members/:userId', async (req, res) => {
+    try {
+        const { channelId, userId } = req.params;
+        const channel = await Channels.findByPk(channelId);
+
+        if (!channel) return res.status(404).json({ message: 'Channel not found' });
+
+        // Check if requester is the creator/admin
+        if (channel.created_by !== req.user.id) {
+            return res.status(403).json({ message: 'Only admin can remove members' });
+        }
+
+        // Prevent removing self
+        if (userId === req.user.id) {
+            return res.status(400).json({ message: 'Admin cannot be removed' });
+        }
+
+        await ChannelMembers.destroy({
+            where: { channel_id: channelId, user_id: userId }
+        });
+
+        res.status(200).json({ message: 'Member removed successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to remove member' });
+    }
+});
+
+// DELETE /api/channels/:channelId/leave (User leaves channel)
+apiRouter.delete('/channels/:channelId/leave', async (req, res) => {
+    try {
+        const { channelId } = req.params;
+        const channel = await Channels.findByPk(channelId);
+
+        if (!channel) return res.status(404).json({ message: 'Channel not found' });
+
+        // Admin cannot leave, must delete
+        if (channel.created_by === req.user.id) {
+            return res.status(400).json({ message: 'Admin cannot leave channel. Delete it instead.' });
+        }
+
+        await ChannelMembers.destroy({
+            where: { channel_id: channelId, user_id: req.user.id }
+        });
+
+        res.status(200).json({ message: 'Left channel successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to leave channel' });
+    }
+});
+
+// DELETE /api/channels/:channelId (Admin deletes channel)
+apiRouter.delete('/channels/:channelId', async (req, res) => {
+    try {
+        const { channelId } = req.params;
+        const channel = await Channels.findByPk(channelId);
+
+        if (!channel) return res.status(404).json({ message: 'Channel not found' });
+
+        // Only admin can delete
+        if (channel.created_by !== req.user.id) {
+            return res.status(403).json({ message: 'Only admin can delete channel' });
+        }
+
+        // Clean up associated data
+        await Messages.destroy({ where: { channel_id: channelId } });
+        await ChannelMembers.destroy({ where: { channel_id: channelId } });
+        await channel.destroy();
+
+        res.status(200).json({ message: 'Channel deleted successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to delete channel' });
     }
 });
 
